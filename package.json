@@ -1,0 +1,20 @@
+{
+  "name": "geoserver-02",
+  "version": "1.0.0",
+  "devDependencies": {
+    "browser-sync": "^2.10.0",
+    "eslint": "^1.10.3",
+    "gulp": "^3.9.0",
+    "gulp-eslint": "^1.1.1",
+    "gulp-if": "^1.2.5",
+    "gulp-jscs": "^2.0.0",
+    "gulp-jshint": "^1.7.1",
+    "gulp-order": "^1.1.1",
+    "gulp-print": "^1.1.0",
+    "gulp-task-listing": "^1.0.1",
+    "gulp-useref": "^1.0.2",
+    "gulp-util": "^3.0.4",
+    "gulp-zip": "^3.0.2"
+  }
+
+}
