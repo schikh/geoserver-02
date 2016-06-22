@@ -1,5 +1,34 @@
 "use strict";
 
+configureLambertProjection();
+var backgroundMapLayer = createBackgroundMapLayer();
+var vectorLayer = createVectorLayer();
+var overlayPopup = createOverlayAttributesPopup();
+var mousePositionControl = createMousePositionControl();
+
+var map = new ol.Map({
+	target: 'map',
+	overlays: [overlayPopup],
+	controls: [mousePositionControl],
+	layers: [backgroundMapLayer, vectorLayer],
+	view: new ol.View({
+		projection: new ol.proj.Projection({
+			code: 'EPSG:31370',
+	 		units: 'm'
+		}),
+		center: [150000, 150000],
+		zoom: 14
+	})
+});
+
+var snapInteration = createSnapInteration(vectorLayer);
+map.addInteraction(snapInteration);
+var selectPointerMove = createSelectOnPointerHoverInteraction();
+map.addInteraction(selectPointerMove);
+var selectInterationOnEdit = createSelectForEditInteration();
+addFloatingButtonsDynamicStyle();
+addChangeResolutionOnZoomButtonsClick();
+
 function configureLambertProjection() {
 	// Set LAMBERT PROJECTION - EPSG 31370
 	var def = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.869,52.2978,-103.724,0.3366,-0.457,1.8422,-1.2747 +units=m +no_defs";
@@ -10,25 +39,7 @@ function configureLambertProjection() {
 function createVectorLayer() {
 	var vectorLayer =  new ol.layer.Vector({
 		source: new ol.source.Vector({
-			loader: function(extent) {
-				$.ajax('http://localhost:9000/geoserver/test01/ows?service=WFS', {
-					type: 'GET',
-					data: {
-						service: 'WFS',
-						version: '1.1.0',
-						request: 'GetFeature',
-						typename: 'test01:Districts',
-						srsname: 'EPSG:31370',
-						bbox: extent.join(',') + ',EPSG:31370'
-					}
-				}).done(function(response) {
-					var formatWFS = new ol.format.WFS();
-					var features = formatWFS.readFeatures(response);
-					vectorLayer.getSource().addFeatures(features);
-				}).fail(function(jqXHR, textStatus) {
-					alert('WFS query error:' + textStatus);
-				});
-			},
+			loader: queryVectorFeaturesService,
 			//strategy: ol.loadingstrategy.bbox
 			strategy: ol.loadingstrategy.tile(ol.tilegrid.createXYZ({
 				maxZoom: 20
@@ -38,75 +49,80 @@ function createVectorLayer() {
 	return vectorLayer;
 }
 
-	// json ===================================================================================================================
+function queryVectorFeaturesService(extent) {
+	$.ajax('http://localhost:9000/geoserver/test01/ows?service=WFS', {
+		type: 'GET',
+		data: {
+			service: 'WFS',
+			version: '1.1.0',
+			request: 'GetFeature',
+			typename: 'test01:Districts',
+			srsname: 'EPSG:31370',
+			bbox: extent.join(',') + ',EPSG:31370'
+		}
+	}).done(function(response) {
+		var formatWFS = new ol.format.WFS();
+		var features = formatWFS.readFeatures(response);
+		vectorLayer.getSource().addFeatures(features);
+	}).fail(function(jqXHR, textStatus) {
+		alert('WFS query error:' + textStatus);
+	});
+}
 
-	// var sourceVector = new ol.source.Vector({
-	// 	loader: function(extent) {
-	// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
-	//              'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
-	//              'outputFormat=application/json&srsname=EPSG:31370&' +
-	//              'bbox=' + extent.join(',') + ',EPSG:31370';
-	// 		$.ajax({
-	// 			url: url
-	// 		}).done(function(response) {
-	// 				var formatWFS = new ol.format.GeoJSON();
-	// 				//var formatWFS = new ol.format.WFS();
-	// 				var features = formatWFS.readFeatures(response);
-	// 				console.log(features);
-	// 				sourceVector.addFeatures(features);
-	// 			});
-	// 	},
-	// 	strategy: function() {
-	// 		return [[14637.25, 22608.21,291015.29 ,246424.28]];
-	// 	}
-	// });
+function GetWfsCommand(action, feature) {
+	var addedFeatures, updatedFeatures, deletedFeatures;
+	switch(action) {
+		case 'insert':
+			addedFeatures = [feature];
+			break;
+		case 'update':
+			updatedFeatures = [feature];
+			break;
+		case 'delete':
+			deletedFeatures = [feature];
+			break;
+	}
+	var gmlFormat = new ol.format.GML({
+		featureNS: 'http://bsr.ores.be/test01',
+		featureType: 'Districts',
+		srsName: 'EPSG:31370'
+	});	
+	var wfsFormat = new ol.format.WFS();
+	var command = wfsFormat.writeTransaction(addedFeatures, updatedFeatures, deletedFeatures, gmlFormat);
+	return command;
+}
 
-	// no code ===================================================================================================================
+function postVectorFeaturesCommand(commandText) {
+	$.ajax('http://localhost:9000/geoserver/test01/ows', {
+		type: 'POST',
+		dataType: 'xml',
+		processData: false,
+		contentType: 'text/xml',
+		data: commandText
+	}).done(function(response) {
+		var formatWFS = new ol.format.WFS();
+		var r = formatWFS.readTransactionResponse(response);		
+		if(r.transactionSummary.totalDeleted !== 1  
+			&& r.transactionSummary.totalInserted !== 1
+			&& r.transactionSummary.totalUpdated !== 1) {
+				alert('WFS Transaction error' + JSON.stringify(r.transactionSummary));
+		}
+	}).fail(function(jqXHR, textStatus) {
+		alert('WFS Transaction error:' + textStatus);
+  	});
+}
 
-	// var sourceVector = new ol.source.Vector({
-	//     format: new ol.format.GeoJSON(),
-	//     url: function(extent) {
-	//         return 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
-	//             'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
-	//             'outputFormat=application/json&srsname=EPSG:31370&' +
-	//             'bbox=' + extent.join(',') + ',EPSG:31370'; 
-	//     },
-	//     // strategy: ol.loadingstrategy.tile(ol.tilegrid.createXYZ({
-	//     //     maxZoom: 10
-	//     // })),
-	// 	 projection: belgianProjection,
-	// 	 strategy: function() {
-	// 	 	return [[14637.25, 22608.21, 291015.29, 246424.28]];
-	// 	 }	
-	// });
-
-	// jsonp ===================================================================================================================
-
-	// var sourceVector = new ol.source.Vector({
-	// 	format: new ol.format.GeoJSON(),
-	// 	loader: function(extent, resolution, projection) {
-	// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
-	// 			'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
-	// 			'outputFormat=text/javascript&format_options=callback:loadFeaturesFixed&srsname=EPSG:31370&' +
-	// 			'bbox=' + extent.join(',') + ',EPSG:31370'; 
-	// 		$.ajax({
-	// 			url: url,
-	// 			dataType: 'jsonp'
-	// 		});
-	// 	},
-	// 	strategy: function() {
-	// 		return [ [0, 0, 250000, 250000] ];
-	// 	},
-	// 	//projection: 'EPSG:31370'
-	// 	projection: belgianProjection
-	// });
-
-	// // Executed when data is loaded by the $.ajax method.
-	// var loadFeaturesFixed = function(response) {
-	// 	console.log(response);
-	// 	sourceVector.addFeatures(sourceVector.readFeatures(response));
-	// };	
-
+function transactWFS(action, feature) {
+	feature.set('DistrictName', "XXX");
+	//feature.set('DistrictId', 12345);
+	//feature.setGeometryName("DistrictGeo"); 
+    var command = GetWfsCommand(action, feature);
+	var serializer = new XMLSerializer();
+	var commandText = serializer.serializeToString(command);
+	commandText = commandText.replace("<geometry>", "<DistrictGeo>");
+	commandText = commandText.replace("</geometry>", "</DistrictGeo>");
+    postVectorFeaturesCommand(commandText);
+}
 function createBackgroundMapLayer() {
 	var layer = new ol.layer.Tile({
 		source: new ol.source.OSM()
@@ -155,7 +171,7 @@ function createSelectForEditInteration() {
 }
 
 function addChangeResolutionOnZoomButtonsClick() {
-	$('#btnZoomIn', '#btnZoomOut').on('click', function() {
+	$('#btnZoomIn,#btnZoomOut').on('click', function() {
 		var view = map.getView();
 		var newResolution = view.constrainResolution(view.getResolution(), -1);
 		view.setResolution(newResolution);
@@ -173,97 +189,7 @@ function addFloatingButtonsDynamicStyle() {
 	);
 }
 
-function XXXXXXXXXXXXX() {
-}
-
-
-
-
-
-
-
-function XXXXXXXXXXXXX() {
-}
-
-configureLambertProjection();
-var backgroundMapLayer = createBackgroundMapLayer();
-var vectorLayer = createVectorLayer();
-var overlayPopup = createOverlayAttributesPopup();
-var mousePositionControl = createMousePositionControl();
-
-var map = new ol.Map({
-	target: 'map',
-	overlays: [overlayPopup],
-	controls: [mousePositionControl],
-	layers: [backgroundMapLayer, vectorLayer],
-	view: new ol.View({
-		projection: new ol.proj.Projection({
-			code: 'EPSG:31370',
-	 		units: 'm'
-		}),
-		center: [150000, 150000],
-		zoom: 14
-	})
-});
-
-var snapInteration = createSnapInteration(vectorLayer);
-map.addInteraction(snapInteration);
-
-var selectPointerMove = createSelectOnPointerHoverInteraction();
-map.addInteraction(selectPointerMove);
-
-var selectInterationOnEdit = createSelectForEditInteration();
-
-addFloatingButtonsDynamicStyle();
-addChangeResolutionOnZoomButtonsClick();
-
 //===================================================================================================================
-
-
-var transactWFS = function(action, feature) {
-	feature.set('DistrictName', "XXX");
-	//feature.set('DistrictId', 12345);
-	//feature.setGeometryName("DistrictGeo"); 
-	var node;
-	var formatWFS = new ol.format.WFS();
-	var formatGML = new ol.format.GML({
-		featureNS: 'http://bsr.ores.be/test01',
-		featureType: 'Districts',
-		srsName: 'EPSG:31370'
-	});	
-	switch(action) {
-		case 'insert':
-			node = formatWFS.writeTransaction([feature], null, null, formatGML);
-			break;
-		case 'update':
-			node = formatWFS.writeTransaction(null, [feature], null, formatGML);
-			break;
-		case 'delete':
-			node = formatWFS.writeTransaction(null, null, [feature], formatGML);
-			break;
-	}
-	var serializer = new XMLSerializer();
-	var str = serializer.serializeToString(node);
-	str = str.replace("<geometry>", "<DistrictGeo>");
-	str = str.replace("</geometry>", "</DistrictGeo>");
-	$.ajax('http://localhost:9000/geoserver/test01/ows', {
-		type: 'POST',
-		dataType: 'xml',
-		processData: false,
-		contentType: 'text/xml',
-		data: str
-	}).done(function(response) {
-		var formatWFS = new ol.format.WFS();
-		var r = formatWFS.readTransactionResponse(response);		
-		if(r.transactionSummary.totalDeleted !== 1  
-			&& r.transactionSummary.totalInserted !== 1
-			&& r.transactionSummary.totalUpdated !== 1) {
-				alert('WFS Transaction error' + JSON.stringify(r.transactionSummary));
-		}
-	}).fail(function(jqXHR, textStatus) {
-		alert('WFS Transaction error:' + textStatus);
-  	});
-}
 
 var interaction;
 var dirty;
@@ -364,4 +290,71 @@ $('.btnMenu').on('click', function(event) {
 	}
 });
 
+// json ===================================================================================================================
 
+// var sourceVector = new ol.source.Vector({
+// 	loader: function(extent) {
+// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
+//              'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
+//              'outputFormat=application/json&srsname=EPSG:31370&' +
+//              'bbox=' + extent.join(',') + ',EPSG:31370';
+// 		$.ajax({
+// 			url: url
+// 		}).done(function(response) {
+// 				var formatWFS = new ol.format.GeoJSON();
+// 				//var formatWFS = new ol.format.WFS();
+// 				var features = formatWFS.readFeatures(response);
+// 				console.log(features);
+// 				sourceVector.addFeatures(features);
+// 			});
+// 	},
+// 	strategy: function() {
+// 		return [[14637.25, 22608.21,291015.29 ,246424.28]];
+// 	}
+// });
+
+// no code ===================================================================================================================
+
+// var sourceVector = new ol.source.Vector({
+//     format: new ol.format.GeoJSON(),
+//     url: function(extent) {
+//         return 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
+//             'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
+//             'outputFormat=application/json&srsname=EPSG:31370&' +
+//             'bbox=' + extent.join(',') + ',EPSG:31370'; 
+//     },
+//     // strategy: ol.loadingstrategy.tile(ol.tilegrid.createXYZ({
+//     //     maxZoom: 10
+//     // })),
+// 	 projection: belgianProjection,
+// 	 strategy: function() {
+// 	 	return [[14637.25, 22608.21, 291015.29, 246424.28]];
+// 	 }	
+// });
+
+// jsonp ===================================================================================================================
+
+// var sourceVector = new ol.source.Vector({
+// 	format: new ol.format.GeoJSON(),
+// 	loader: function(extent, resolution, projection) {
+// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
+// 			'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
+// 			'outputFormat=text/javascript&format_options=callback:loadFeaturesFixed&srsname=EPSG:31370&' +
+// 			'bbox=' + extent.join(',') + ',EPSG:31370'; 
+// 		$.ajax({
+// 			url: url,
+// 			dataType: 'jsonp'
+// 		});
+// 	},
+// 	strategy: function() {
+// 		return [ [0, 0, 250000, 250000] ];
+// 	},
+// 	//projection: 'EPSG:31370'
+// 	projection: belgianProjection
+// });
+
+// // Executed when data is loaded by the $.ajax method.
+// var loadFeaturesFixed = function(response) {
+// 	console.log(response);
+// 	sourceVector.addFeatures(sourceVector.readFeatures(response));
+// };	
