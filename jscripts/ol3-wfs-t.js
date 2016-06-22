@@ -1,125 +1,201 @@
 "use strict";
 
-// Set LAMBERT PROJECTION - EPSG 31370
-var def = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.869,52.2978,-103.724,0.3366,-0.457,1.8422,-1.2747 +units=m +no_defs";
-proj4.defs("EPSG:31370", def);
-proj4.defs("http://www.opengis.net/gml/srs/epsg.xml#31370", def);
+function configureLambertProjection() {
+	// Set LAMBERT PROJECTION - EPSG 31370
+	var def = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.869,52.2978,-103.724,0.3366,-0.457,1.8422,-1.2747 +units=m +no_defs";
+	proj4.defs("EPSG:31370", def);
+	proj4.defs("http://www.opengis.net/gml/srs/epsg.xml#31370", def);
+}
 
-//===================================================================================================================
+function createVectorLayer() {
+	var vectorLayer =  new ol.layer.Vector({
+		source: new ol.source.Vector({
+			loader: function(extent) {
+				$.ajax('http://localhost:9000/geoserver/test01/ows?service=WFS', {
+					type: 'GET',
+					data: {
+						service: 'WFS',
+						version: '1.1.0',
+						request: 'GetFeature',
+						typename: 'test01:Districts',
+						srsname: 'EPSG:31370',
+						bbox: extent.join(',') + ',EPSG:31370'
+					}
+				}).done(function(response) {
+					var formatWFS = new ol.format.WFS();
+					var features = formatWFS.readFeatures(response);
+					vectorLayer.getSource().addFeatures(features);
+				}).fail(function(jqXHR, textStatus) {
+					alert('WFS query error:' + textStatus);
+				});
+			},
+			//strategy: ol.loadingstrategy.bbox
+			strategy: ol.loadingstrategy.tile(ol.tilegrid.createXYZ({
+				maxZoom: 20
+			}))			
+		})
+	});
+	return vectorLayer;
+}
 
-var layerVector = new ol.layer.Vector({
-	source: new ol.source.Vector({
-		loader: function(extent) {
-			$.ajax('http://localhost:9000/geoserver/test01/ows?service=WFS', {
-				type: 'GET',
-				data: {
-					service: 'WFS',
-					version: '1.1.0',
-					request: 'GetFeature',
-					typename: 'test01:Districts',
-					srsname: 'EPSG:31370',
-					bbox: extent.join(',') + ',EPSG:31370'
-				}
-			}).done(function(response) {
-				var formatWFS = new ol.format.WFS();
-				var features = formatWFS.readFeatures(response);
-				layerVector.getSource().addFeatures(features);
-			});
+	// json ===================================================================================================================
+
+	// var sourceVector = new ol.source.Vector({
+	// 	loader: function(extent) {
+	// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
+	//              'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
+	//              'outputFormat=application/json&srsname=EPSG:31370&' +
+	//              'bbox=' + extent.join(',') + ',EPSG:31370';
+	// 		$.ajax({
+	// 			url: url
+	// 		}).done(function(response) {
+	// 				var formatWFS = new ol.format.GeoJSON();
+	// 				//var formatWFS = new ol.format.WFS();
+	// 				var features = formatWFS.readFeatures(response);
+	// 				console.log(features);
+	// 				sourceVector.addFeatures(features);
+	// 			});
+	// 	},
+	// 	strategy: function() {
+	// 		return [[14637.25, 22608.21,291015.29 ,246424.28]];
+	// 	}
+	// });
+
+	// no code ===================================================================================================================
+
+	// var sourceVector = new ol.source.Vector({
+	//     format: new ol.format.GeoJSON(),
+	//     url: function(extent) {
+	//         return 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
+	//             'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
+	//             'outputFormat=application/json&srsname=EPSG:31370&' +
+	//             'bbox=' + extent.join(',') + ',EPSG:31370'; 
+	//     },
+	//     // strategy: ol.loadingstrategy.tile(ol.tilegrid.createXYZ({
+	//     //     maxZoom: 10
+	//     // })),
+	// 	 projection: belgianProjection,
+	// 	 strategy: function() {
+	// 	 	return [[14637.25, 22608.21, 291015.29, 246424.28]];
+	// 	 }	
+	// });
+
+	// jsonp ===================================================================================================================
+
+	// var sourceVector = new ol.source.Vector({
+	// 	format: new ol.format.GeoJSON(),
+	// 	loader: function(extent, resolution, projection) {
+	// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
+	// 			'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
+	// 			'outputFormat=text/javascript&format_options=callback:loadFeaturesFixed&srsname=EPSG:31370&' +
+	// 			'bbox=' + extent.join(',') + ',EPSG:31370'; 
+	// 		$.ajax({
+	// 			url: url,
+	// 			dataType: 'jsonp'
+	// 		});
+	// 	},
+	// 	strategy: function() {
+	// 		return [ [0, 0, 250000, 250000] ];
+	// 	},
+	// 	//projection: 'EPSG:31370'
+	// 	projection: belgianProjection
+	// });
+
+	// // Executed when data is loaded by the $.ajax method.
+	// var loadFeaturesFixed = function(response) {
+	// 	console.log(response);
+	// 	sourceVector.addFeatures(sourceVector.readFeatures(response));
+	// };	
+
+function createBackgroundMapLayer() {
+	var layer = new ol.layer.Tile({
+		source: new ol.source.OSM()
+	});
+	layer.setOpacity(.3);
+	return layer;
+}
+
+function createOverlayAttributesPopup() {
+	var popup = document.getElementById('popup');
+	var overlayPopup = new ol.Overlay({
+		element: popup
+	});
+	$('#popup-closer').on('click', function() {
+		overlayPopup.setPosition(undefined);
+	});
+	return overlayPopup;
+}
+
+function createMousePositionControl() {
+	return new ol.control.MousePosition({
+		coordinateFormat: ol.coordinate.createStringXY(4),
+	})	
+}
+
+function createSnapInteration(layer) {
+	return new ol.interaction.Snap({
+		source: layer.getSource()
+	});
+}
+
+function createSelectOnPointerHoverInteraction() {
+	return new ol.interaction.Select({
+		condition: ol.events.condition.pointerMove
+	});
+}
+
+function createSelectForEditInteration() {
+	return new ol.interaction.Select({
+		style: new ol.style.Style({
+			stroke: new ol.style.Stroke({
+				color: '#FF0000'
+			})
+		})
+	});
+}
+
+function addChangeResolutionOnZoomButtonsClick() {
+	$('#btnZoomIn', '#btnZoomOut').on('click', function() {
+		var view = map.getView();
+		var newResolution = view.constrainResolution(view.getResolution(), -1);
+		view.setResolution(newResolution);
+	});
+}
+
+function addFloatingButtonsDynamicStyle() {
+	$('.btn-floating').hover(
+		function() {
+			$(this).addClass('darken-2');
 		},
-		strategy: ol.loadingstrategy.bbox
-	})
-});
+		function() {
+			$(this).removeClass('darken-2');
+		}
+	);
+}
 
-// json ===================================================================================================================
+function XXXXXXXXXXXXX() {
+}
 
-// var sourceVector = new ol.source.Vector({
-// 	loader: function(extent) {
-// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
-//              'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
-//              'outputFormat=application/json&srsname=EPSG:31370&' +
-//              'bbox=' + extent.join(',') + ',EPSG:31370';
-// 		$.ajax({
-// 			url: url
-// 		}).done(function(response) {
-// 				var formatWFS = new ol.format.GeoJSON();
-// 				//var formatWFS = new ol.format.WFS();
-// 				var features = formatWFS.readFeatures(response);
-// 				console.log(features);
-// 				sourceVector.addFeatures(features);
-// 			});
-// 	},
-// 	strategy: function() {
-// 		return [[14637.25, 22608.21,291015.29 ,246424.28]];
-// 	}
-// });
 
-// no code ===================================================================================================================
 
-// var sourceVector = new ol.source.Vector({
-//     format: new ol.format.GeoJSON(),
-//     url: function(extent) {
-//         return 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
-//             'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
-//             'outputFormat=application/json&srsname=EPSG:31370&' +
-//             'bbox=' + extent.join(',') + ',EPSG:31370'; 
-//     },
-//     // strategy: ol.loadingstrategy.tile(ol.tilegrid.createXYZ({
-//     //     maxZoom: 10
-//     // })),
-// 	 projection: belgianProjection,
-// 	 strategy: function() {
-// 	 	return [[14637.25, 22608.21, 291015.29, 246424.28]];
-// 	 }	
-// });
 
-// jsonp ===================================================================================================================
 
-// var sourceVector = new ol.source.Vector({
-// 	format: new ol.format.GeoJSON(),
-// 	loader: function(extent, resolution, projection) {
-// 		var url = 'http://localhost:9000/geoserver/test01/ows?service=WFS&' +
-// 			'version=2.0.0&request=GetFeature&typename=test01:Districts&' +
-// 			'outputFormat=text/javascript&format_options=callback:loadFeaturesFixed&srsname=EPSG:31370&' +
-// 			'bbox=' + extent.join(',') + ',EPSG:31370'; 
-// 		$.ajax({
-// 			url: url,
-// 			dataType: 'jsonp'
-// 		});
-// 	},
-// 	strategy: function() {
-// 		return [ [0, 0, 250000, 250000] ];
-// 	},
-// 	//projection: 'EPSG:31370'
-// 	projection: belgianProjection
-// });
 
-// // Executed when data is loaded by the $.ajax method.
-// var loadFeaturesFixed = function(response) {
-// 	console.log(response);
-// 	sourceVector.addFeatures(sourceVector.readFeatures(response));
-// };
 
-//===================================================================================================================
+function XXXXXXXXXXXXX() {
+}
 
-var popup = document.getElementById('popup');
-
-var overlayPopup = new ol.Overlay({
-	element: popup
-});
-
-$('#popup-closer').on('click', function() {
-	overlayPopup.setPosition(undefined);
-});
-
-var mapLayer = new ol.layer.Tile({
-    source: new ol.source.OSM()
-});
+configureLambertProjection();
+var backgroundMapLayer = createBackgroundMapLayer();
+var vectorLayer = createVectorLayer();
+var overlayPopup = createOverlayAttributesPopup();
+var mousePositionControl = createMousePositionControl();
 
 var map = new ol.Map({
 	target: 'map',
 	overlays: [overlayPopup],
-	//controls: [controlMousePosition],
-	layers: [layerVector],
+	controls: [mousePositionControl],
+	layers: [backgroundMapLayer, vectorLayer],
 	view: new ol.View({
 		projection: new ol.proj.Projection({
 			code: 'EPSG:31370',
@@ -129,6 +205,20 @@ var map = new ol.Map({
 		zoom: 14
 	})
 });
+
+var snapInteration = createSnapInteration(vectorLayer);
+map.addInteraction(snapInteration);
+
+var selectPointerMove = createSelectOnPointerHoverInteraction();
+map.addInteraction(selectPointerMove);
+
+var selectInterationOnEdit = createSelectForEditInteration();
+
+addFloatingButtonsDynamicStyle();
+addChangeResolutionOnZoomButtonsClick();
+
+//===================================================================================================================
+
 
 var transactWFS = function(action, feature) {
 	feature.set('DistrictName', "XXX");
@@ -162,29 +252,18 @@ var transactWFS = function(action, feature) {
 		processData: false,
 		contentType: 'text/xml',
 		data: str
-	}).done();
+	}).done(function(response) {
+		var formatWFS = new ol.format.WFS();
+		var r = formatWFS.readTransactionResponse(response);		
+		if(r.transactionSummary.totalDeleted !== 1  
+			&& r.transactionSummary.totalInserted !== 1
+			&& r.transactionSummary.totalUpdated !== 1) {
+				alert('WFS Transaction error' + JSON.stringify(r.transactionSummary));
+		}
+	}).fail(function(jqXHR, textStatus) {
+		alert('WFS Transaction error:' + textStatus);
+  	});
 }
-
-
-//hover highlight
-var selectPointerMove = new ol.interaction.Select({
-	condition: ol.events.condition.pointerMove
-});
-
-map.addInteraction(selectPointerMove);
-
-var snap = new ol.interaction.Snap({
-	source: layerVector.getSource()
-});
-map.addInteraction(snap);
-
-var select = new ol.interaction.Select({
-	style: new ol.style.Style({
-		stroke: new ol.style.Stroke({
-			color: '#FF2828'
-		})
-	})
-});
 
 var interaction;
 var dirty;
@@ -193,8 +272,8 @@ $('.btnMenu').on('click', function(event) {
 	$('.btnMenu').removeClass('orange');
 	$(this).addClass('orange');
 	map.removeInteraction(interaction);
-	select.getFeatures().clear();
-	map.removeInteraction(select);
+	selectInterationOnEdit.getFeatures().clear();
+	map.removeInteraction(selectInterationOnEdit);
 	switch($(this).attr('id')) {
 		case 'btnSelect':
 			interaction = new ol.interaction.Select({
@@ -207,26 +286,26 @@ $('.btnMenu').on('click', function(event) {
 			});
 			map.addInteraction(interaction);
 			interaction.getFeatures().on('add', function(e) {
-				props = e.element.getProperties();
-				if (props.status){$('#popup-status').html(props.status);}else{$('#popup-status').html('n/a');}
-				if (props.tiendas){$('#popup-tiendas').html(props.tiendas);}else{$('#popup-tiendas').html('n/a');}
-				coord = $('.ol-mouse-position').html().split(',');
+				var props = e.element.getProperties();
+				$('#popup-id').html(e.element.getId());
+				$('#popup-name').html(props.DistrictName);
+				var coord = $('.ol-mouse-position').html().split(',');
 				overlayPopup.setPosition(coord);
 			});
 			break;
 		case 'btnEdit':
-			map.addInteraction(select);
+			map.addInteraction(selectInterationOnEdit);
 			interaction = new ol.interaction.Modify({
-				features: select.getFeatures()
+				features: selectInterationOnEdit.getFeatures()
 			});
 			map.addInteraction(interaction);
 			dirty = [];
-			select.getFeatures().on('add', function(e) {
+			selectInterationOnEdit.getFeatures().on('add', function(e) {
 				e.element.on('change', function(e) {
 					dirty[e.target.getId()] = true;
 				});
 			});
-			select.getFeatures().on('remove', function(e) {
+			selectInterationOnEdit.getFeatures().on('remove', function(e) {
 				var f = e.element;
 				if (dirty[f.getId()]) {
 					delete dirty[f.getId()];
@@ -241,7 +320,7 @@ $('.btnMenu').on('click', function(event) {
 		case 'btnDrawPoint':
 			interaction = new ol.interaction.Draw({
 				type: 'Point',
-				source: layerVector.getSource()
+				source: vectorLayer.getSource()
 			});
 			interaction.on('drawend', function(e) {
 				transactWFS('insert', e.feature);
@@ -251,7 +330,7 @@ $('.btnMenu').on('click', function(event) {
 		case 'btnDrawLine':
 			interaction = new ol.interaction.Draw({
 				type: 'LineString',
-				source: layerVector.getSource()
+				source: vectorLayer.getSource()
 			});
 			interaction.on('drawend', function(e) {
 				transactWFS('insert', e.feature);
@@ -261,7 +340,7 @@ $('.btnMenu').on('click', function(event) {
 		case 'btnDrawPoly':
 			interaction = new ol.interaction.Draw({
 				type: 'Polygon',
-				source: layerVector.getSource()
+				source: vectorLayer.getSource()
 			});
 			interaction.on('drawend', function(e) {
 				transactWFS('insert', e.feature);
@@ -274,7 +353,7 @@ $('.btnMenu').on('click', function(event) {
 				var feature = interaction.getFeatures().item(0);
 				if(!feature) return;
 				transactWFS('delete', feature);
-				layerVector.getSource().removeFeature(feature);
+				vectorLayer.getSource().removeFeature(feature);
 				interaction.getFeatures().clear();
 				selectPointerMove.getFeatures().clear();
 			});
@@ -285,23 +364,4 @@ $('.btnMenu').on('click', function(event) {
 	}
 });
 
-$('#btnZoomIn').on('click', function() {
-	var view = map.getView();
-	var newResolution = view.constrainResolution(view.getResolution(), 1);
-	view.setResolution(newResolution);
-});
 
-$('#btnZoomOut').on('click', function() {
-	var view = map.getView();
-	var newResolution = view.constrainResolution(view.getResolution(), -1);
-	view.setResolution(newResolution);
-});
-
-$('.btn-floating').hover(
-	function() {
-		$(this).addClass('darken-2');
-	},
-	function() {
-		$(this).removeClass('darken-2');
-	}
-);

@@ -20,7 +20,6 @@ var paths = {
  */
 var config = {
     rootDirectory: './',
-    bowerDirectory: './lib',
     index: 'index.html',
     alljs: [
         './*.js'
@@ -38,13 +37,13 @@ gulp.task('dev', function() {
 		notify: false,
 		port: 8080,
 		server: {
-			//baseDir: [],
+			baseDir: ['./'],
 	 		routes: { 
 				'/bower_components' : 'bower_components', 
 			}
 		}
 	});
-	gulp.watch(['**/*.*'])
+	gulp.watch(['jscripts/**/*.*', 'stylesheets/**/*.*', '*.*'])
 		.on('change', browserSync.reload);
 });
 
@@ -55,6 +54,14 @@ gulp.task('analyse', function () {
         .pipe(gulpeslint())
         .pipe(gulpeslint.format());
 });
+
+
+
+
+
+
+
+
 
 /**
  * vet the code and create coverage report
