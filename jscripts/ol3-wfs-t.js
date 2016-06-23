@@ -6,11 +6,44 @@ var vectorLayer = createVectorLayer();
 var overlayPopup = createOverlayAttributesPopup();
 var mousePositionControl = createMousePositionControl();
 
+
+// http://localhost:9000/geoserver/test01/wms?service=WMS&version=1.1.0&request=GetMap&layers=test01:Assets&styles=&bbox=140000.0,150000.0,142000.0,151000.0&width=768&height=384&srs=EPSG:31370&format=application/openlayers&CQL_FILTER=LayerId=5
+// http://localhost:9000/geoserver/test01    ?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=test01%3AAssets&TILED=true&WIDTH=256&HEIGHT=256&CRS=EPSG%3A31370&STYLES&BBOX=625471.1678513326%2C0%2C781838.9598141655%2C156367.7919628329
+// http://localhost:9000/geoserver/test01/wms?SERVICE=WMS&VERSION=1.3.0
+// &REQUEST=GetMap
+// &FORMAT=image%2Fpng
+// &TRANSPARENT=true
+// &LAYERS=test01%3AAssets
+// &TILED=true
+// &WIDTH=256
+// &HEIGHT=256
+// &CRS=EPSG%3A31370
+// &STYLES
+// &BBOX=149038.05171457678%2C149038.05171457678%2C151481.29846399603%2C151481.29846399603
+// http://localhost:9000/geoserver/test01/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true& LAYERS=test01%3AAssets &TILED=true&CQL_FILTER=LayerId%3E5&WIDTH=256&HEIGHT=256&CRS=EPSG%3A31370&STYLES&BBOX=149038.05171457678%2C149038.05171457678%2C151481.29846399603%2C151481.29846399603
+
+// http://localhost:9000/geoserver/test01/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=test01%3AAssets&TILED=true&CQL_FILTER=LayerId in (5,6,9)&WIDTH=256&HEIGHT=256&CRS=EPSG%3A31370&STYLES&BBOX=149038.05171457678%2C149038.05171457678%2C151481.29846399603%2C151481.29846399603
+
+var backgroundWmsLayer = new ol.layer.Tile({
+    source: new ol.source.TileWMS({
+      url: 'http://localhost:9000/geoserver/test01/wms',
+      params: {'LAYERS': 'test01:Assets', 'CQL_FILTER': 'LayerId in (5,6,9)'},
+      serverType: 'geoserver'
+    })
+});
+
 var map = new ol.Map({
 	target: 'map',
 	overlays: [overlayPopup],
-	controls: [mousePositionControl],
-	layers: [backgroundMapLayer, vectorLayer],
+	controls: [mousePositionControl
+		// new ol.control.Attribution(),
+		// new ol.control.ScaleLine(),
+		// new ol.control.Zoom(),
+		// new ol.control.ZoomSlider(),
+		// new ol.control.ZoomToExtent(),
+		// new ol.control.FullScreen()
+	],
+	layers: [backgroundMapLayer, backgroundWmsLayer, vectorLayer],
 	view: new ol.View({
 		projection: new ol.proj.Projection({
 			code: 'EPSG:31370',
@@ -21,13 +54,15 @@ var map = new ol.Map({
 	})
 });
 
+
 var snapInteration = createSnapInteration(vectorLayer);
 map.addInteraction(snapInteration);
 var selectPointerMove = createSelectOnPointerHoverInteraction();
 map.addInteraction(selectPointerMove);
 var selectInterationOnEdit = createSelectForEditInteration();
 addFloatingButtonsDynamicStyle();
-addChangeResolutionOnZoomButtonsClick();
+registerZoomButtonsClickHandler();
+registerMenuButtuonsClickHandler();
 
 function configureLambertProjection() {
 	// Set LAMBERT PROJECTION - EPSG 31370
@@ -92,7 +127,7 @@ function GetWfsCommand(action, feature) {
 	return command;
 }
 
-function postVectorFeaturesCommand(commandText) {
+function postCommandToVectorFeaturesService(commandText) {
 	$.ajax('http://localhost:9000/geoserver/test01/ows', {
 		type: 'POST',
 		dataType: 'xml',
@@ -121,7 +156,7 @@ function transactWFS(action, feature) {
 	var commandText = serializer.serializeToString(command);
 	commandText = commandText.replace("<geometry>", "<DistrictGeo>");
 	commandText = commandText.replace("</geometry>", "</DistrictGeo>");
-    postVectorFeaturesCommand(commandText);
+    postCommandToVectorFeaturesService(commandText);
 }
 function createBackgroundMapLayer() {
 	var layer = new ol.layer.Tile({
@@ -170,7 +205,7 @@ function createSelectForEditInteration() {
 	});
 }
 
-function addChangeResolutionOnZoomButtonsClick() {
+function registerZoomButtonsClickHandler() {
 	$('#btnZoomIn,#btnZoomOut').on('click', function() {
 		var view = map.getView();
 		var newResolution = view.constrainResolution(view.getResolution(), -1);
@@ -189,12 +224,6 @@ function addFloatingButtonsDynamicStyle() {
 	);
 }
 
-
-//===================================================================================================================
-
-var interaction;
-var dirty;
-
 function activateDrawInteraction(type) {
 	interaction = new ol.interaction.Draw({
 		type: type,
@@ -206,13 +235,38 @@ function activateDrawInteraction(type) {
 	map.addInteraction(interaction);
 }
 
-$('.btnMenu').on('click', function(event) {
-	$('.btnMenu').removeClass('orange');
-	$(this).addClass('orange');
-	map.removeInteraction(interaction);
-	selectInterationOnEdit.getFeatures().clear();
-	map.removeInteraction(selectInterationOnEdit);
-	switch($(this).attr('id')) {
+function activateDeleteInteraction(type) {
+	interaction = new ol.interaction.Select();
+	interaction.getFeatures().on('change:length', function(e) {
+		var feature = interaction.getFeatures().item(0);
+		if(!feature) return;
+		transactWFS('delete', feature);
+		vectorLayer.getSource().removeFeature(feature);
+		interaction.getFeatures().clear();
+		selectPointerMove.getFeatures().clear();
+	});
+	map.addInteraction(interaction);
+}
+
+function registerMenuButtuonsClickHandler() {
+	$('.btnMenu').on('click', function(event) {
+		$('.btnMenu').removeClass('orange');
+		$(this).addClass('orange');	
+
+		map.removeInteraction(interaction);
+		selectInterationOnEdit.getFeatures().clear();
+		map.removeInteraction(selectInterationOnEdit);
+
+		var buttonId = $(this).attr('id');
+		menuButtuonsClickHandler(buttonId);			
+	});
+}
+
+var interaction;
+var dirty;
+
+function menuButtuonsClickHandler(buttonId) {
+	switch(buttonId) {
 		case 'btnSelect':
 			interaction = new ol.interaction.Select({
 				style: new ol.style.Style({
@@ -265,21 +319,76 @@ $('.btnMenu').on('click', function(event) {
 			activateDrawInteraction('Polygon');
 			break;
 		case 'btnDelete':
-			interaction = new ol.interaction.Select();
-			interaction.getFeatures().on('change:length', function(e) {
-				var feature = interaction.getFeatures().item(0);
-				if(!feature) return;
-				transactWFS('delete', feature);
-				vectorLayer.getSource().removeFeature(feature);
-				interaction.getFeatures().clear();
-				selectPointerMove.getFeatures().clear();
-			});
-			map.addInteraction(interaction);
 			break;
 		default:
 			break;
 	}
-});
+}
+
+// $('.btnMenu').on('click', function(event) {
+// 	$('.btnMenu').removeClass('orange');
+// 	$(this).addClass('orange');
+// 	map.removeInteraction(interaction);
+// 	selectInterationOnEdit.getFeatures().clear();
+// 	map.removeInteraction(selectInterationOnEdit);
+// 	switch($(this).attr('id')) {
+// 		case 'btnSelect':
+// 			interaction = new ol.interaction.Select({
+// 				style: new ol.style.Style({
+// 					stroke: new ol.style.Stroke({
+// 						color: '#f50057', 
+// 						width: 2
+// 					})
+// 				})
+// 			});
+// 			map.addInteraction(interaction);
+// 			interaction.getFeatures().on('add', function(e) {
+// 				var props = e.element.getProperties();
+// 				$('#popup-id').html(e.element.getId());
+// 				$('#popup-name').html(props.DistrictName);
+// 				var coord = $('.ol-mouse-position').html().split(',');
+// 				overlayPopup.setPosition(coord);
+// 			});
+// 			break;
+// 		case 'btnEdit':
+// 			map.addInteraction(selectInterationOnEdit);
+// 			interaction = new ol.interaction.Modify({
+// 				features: selectInterationOnEdit.getFeatures()
+// 			});
+// 			map.addInteraction(interaction);
+// 			dirty = [];
+// 			selectInterationOnEdit.getFeatures().on('add', function(e) {
+// 				e.element.on('change', function(e) {
+// 					dirty[e.target.getId()] = true;
+// 				});
+// 			});
+// 			selectInterationOnEdit.getFeatures().on('remove', function(e) {
+// 				var f = e.element;
+// 				if (dirty[f.getId()]) {
+// 					delete dirty[f.getId()];
+// 					var featureProperties = f.getProperties();
+// 					delete featureProperties.boundedBy;
+// 					var clone = new ol.Feature(featureProperties);
+// 					clone.setId(f.getId());
+// 					transactWFS('update', clone);
+// 				}
+// 			});
+// 			break;
+// 		case 'btnDrawPoint':
+// 			activateDrawInteraction('Point');
+// 			break;
+// 		case 'btnDrawLine':
+// 			activateDrawInteraction('LineString');
+// 			break;
+// 		case 'btnDrawPoly':
+// 			activateDrawInteraction('Polygon');
+// 			break;
+// 		case 'btnDelete':
+// 			break;
+// 		default:
+// 			break;
+// 	}
+// });
 
 // json ===================================================================================================================
 

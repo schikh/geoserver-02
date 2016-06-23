@@ -55,14 +55,6 @@ gulp.task('analyse', function () {
         .pipe(gulpeslint.format());
 });
 
-
-
-
-
-
-
-
-
 /**
  * vet the code and create coverage report
  * @return {Stream}
