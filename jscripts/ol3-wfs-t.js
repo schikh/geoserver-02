@@ -189,10 +189,22 @@ function addFloatingButtonsDynamicStyle() {
 	);
 }
 
+
 //===================================================================================================================
 
 var interaction;
 var dirty;
+
+function activateDrawInteraction(type) {
+	interaction = new ol.interaction.Draw({
+		type: type,
+		source: vectorLayer.getSource()
+	});
+	interaction.on('drawend', function(e) {
+		transactWFS('insert', e.feature);
+	});
+	map.addInteraction(interaction);
+}
 
 $('.btnMenu').on('click', function(event) {
 	$('.btnMenu').removeClass('orange');
@@ -244,34 +256,13 @@ $('.btnMenu').on('click', function(event) {
 			});
 			break;
 		case 'btnDrawPoint':
-			interaction = new ol.interaction.Draw({
-				type: 'Point',
-				source: vectorLayer.getSource()
-			});
-			interaction.on('drawend', function(e) {
-				transactWFS('insert', e.feature);
-			});
-			map.addInteraction(interaction);
+			activateDrawInteraction('Point');
 			break;
 		case 'btnDrawLine':
-			interaction = new ol.interaction.Draw({
-				type: 'LineString',
-				source: vectorLayer.getSource()
-			});
-			interaction.on('drawend', function(e) {
-				transactWFS('insert', e.feature);
-			});
-			map.addInteraction(interaction);
+			activateDrawInteraction('LineString');
 			break;
 		case 'btnDrawPoly':
-			interaction = new ol.interaction.Draw({
-				type: 'Polygon',
-				source: vectorLayer.getSource()
-			});
-			interaction.on('drawend', function(e) {
-				transactWFS('insert', e.feature);
-			});
-			map.addInteraction(interaction);
+			activateDrawInteraction('Polygon');
 			break;
 		case 'btnDelete':
 			interaction = new ol.interaction.Select();
