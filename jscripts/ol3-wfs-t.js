@@ -1,11 +1,13 @@
 "use strict";
 
+var interaction;
+var dirty;
+
 configureLambertProjection();
 var backgroundMapLayer = createBackgroundMapLayer();
 var vectorLayer = createVectorLayer();
 var overlayPopup = createOverlayAttributesPopup();
 var mousePositionControl = createMousePositionControl();
-
 
 // http://localhost:9000/geoserver/test01/wms?service=WMS&version=1.1.0&request=GetMap&layers=test01:Assets&styles=&bbox=140000.0,150000.0,142000.0,151000.0&width=768&height=384&srs=EPSG:31370&format=application/openlayers&CQL_FILTER=LayerId=5
 // http://localhost:9000/geoserver/test01    ?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=test01%3AAssets&TILED=true&WIDTH=256&HEIGHT=256&CRS=EPSG%3A31370&STYLES&BBOX=625471.1678513326%2C0%2C781838.9598141655%2C156367.7919628329
@@ -27,7 +29,7 @@ var mousePositionControl = createMousePositionControl();
 var backgroundWmsLayer = new ol.layer.Tile({
     source: new ol.source.TileWMS({
       url: 'http://localhost:9000/geoserver/test01/wms',
-      params: {'LAYERS': 'test01:Assets', 'CQL_FILTER': 'LayerId in (5,6,9)'},
+      params: {'LAYERS': 'test01:Assets1,test01:Assets2,test01:Assets3', 'CQL_FILTER': 'LayerId in (1,2,3,5) and FluidId in (2);LayerId in (1,2,3,5) and FluidId in (2,4,8,9);LayerId in (1,2,3,5) and FluidId in (1,2,5)'},
       serverType: 'geoserver'
     })
 });
@@ -207,8 +209,10 @@ function createSelectForEditInteration() {
 
 function registerZoomButtonsClickHandler() {
 	$('#btnZoomIn,#btnZoomOut').on('click', function() {
+		var buttonId = $(this).attr('id');
+		var step = buttonId === "btnZoomIn" ? 1 : -1;
 		var view = map.getView();
-		var newResolution = view.constrainResolution(view.getResolution(), -1);
+		var newResolution = view.constrainResolution(view.getResolution(), step);
 		view.setResolution(newResolution);
 	});
 }
@@ -224,6 +228,29 @@ function addFloatingButtonsDynamicStyle() {
 	);
 }
 
+function menuButtuonsClickHandler(buttonId) {
+	switch(buttonId) {
+		case 'btnSelect':
+			activateShowAttributeInteraction();
+			break;
+		case 'btnEdit':
+			activateModifyInteraction();
+			break;
+		case 'btnDrawPoint':
+			activateDrawInteraction('Point');
+			break;
+		case 'btnDrawLine':
+			activateDrawInteraction('LineString');
+			break;
+		case 'btnDrawPoly':
+			activateDrawInteraction('Polygon');
+			break;
+		case 'btnDelete':
+			activateDeleteInteraction();
+			break;
+	}
+}
+
 function activateDrawInteraction(type) {
 	interaction = new ol.interaction.Draw({
 		type: type,
@@ -235,7 +262,7 @@ function activateDrawInteraction(type) {
 	map.addInteraction(interaction);
 }
 
-function activateDeleteInteraction(type) {
+function activateDeleteInteraction() {
 	interaction = new ol.interaction.Select();
 	interaction.getFeatures().on('change:length', function(e) {
 		var feature = interaction.getFeatures().item(0);
@@ -246,6 +273,50 @@ function activateDeleteInteraction(type) {
 		selectPointerMove.getFeatures().clear();
 	});
 	map.addInteraction(interaction);
+}
+
+function activateShowAttributeInteraction() {
+	interaction = new ol.interaction.Select({
+		style: new ol.style.Style({
+			stroke: new ol.style.Stroke({
+				color: '#f50057', 
+				width: 2
+			})
+		})
+	});
+	map.addInteraction(interaction);
+	interaction.getFeatures().on('add', function(e) {
+		var props = e.element.getProperties();
+		$('#popup-id').html(e.element.getId());
+		$('#popup-name').html(props.DistrictName);
+		var coord = $('.ol-mouse-position').html().split(',');
+		overlayPopup.setPosition(coord);
+	});
+}
+
+function activateModifyInteraction() {
+	map.addInteraction(selectInterationOnEdit);
+	interaction = new ol.interaction.Modify({
+		features: selectInterationOnEdit.getFeatures()
+	});
+	map.addInteraction(interaction);
+	dirty = [];
+	selectInterationOnEdit.getFeatures().on('add', function(e) {
+		e.element.on('change', function(e) {
+			dirty[e.target.getId()] = true;
+		});
+	});
+	selectInterationOnEdit.getFeatures().on('remove', function(e) {
+		var f = e.element;
+		if (dirty[f.getId()]) {
+			delete dirty[f.getId()];
+			var featureProperties = f.getProperties();
+			delete featureProperties.boundedBy;
+			var clone = new ol.Feature(featureProperties);
+			clone.setId(f.getId());
+			transactWFS('update', clone);
+		}
+	});
 }
 
 function registerMenuButtuonsClickHandler() {
@@ -260,69 +331,6 @@ function registerMenuButtuonsClickHandler() {
 		var buttonId = $(this).attr('id');
 		menuButtuonsClickHandler(buttonId);			
 	});
-}
-
-var interaction;
-var dirty;
-
-function menuButtuonsClickHandler(buttonId) {
-	switch(buttonId) {
-		case 'btnSelect':
-			interaction = new ol.interaction.Select({
-				style: new ol.style.Style({
-					stroke: new ol.style.Stroke({
-						color: '#f50057', 
-						width: 2
-					})
-				})
-			});
-			map.addInteraction(interaction);
-			interaction.getFeatures().on('add', function(e) {
-				var props = e.element.getProperties();
-				$('#popup-id').html(e.element.getId());
-				$('#popup-name').html(props.DistrictName);
-				var coord = $('.ol-mouse-position').html().split(',');
-				overlayPopup.setPosition(coord);
-			});
-			break;
-		case 'btnEdit':
-			map.addInteraction(selectInterationOnEdit);
-			interaction = new ol.interaction.Modify({
-				features: selectInterationOnEdit.getFeatures()
-			});
-			map.addInteraction(interaction);
-			dirty = [];
-			selectInterationOnEdit.getFeatures().on('add', function(e) {
-				e.element.on('change', function(e) {
-					dirty[e.target.getId()] = true;
-				});
-			});
-			selectInterationOnEdit.getFeatures().on('remove', function(e) {
-				var f = e.element;
-				if (dirty[f.getId()]) {
-					delete dirty[f.getId()];
-					var featureProperties = f.getProperties();
-					delete featureProperties.boundedBy;
-					var clone = new ol.Feature(featureProperties);
-					clone.setId(f.getId());
-					transactWFS('update', clone);
-				}
-			});
-			break;
-		case 'btnDrawPoint':
-			activateDrawInteraction('Point');
-			break;
-		case 'btnDrawLine':
-			activateDrawInteraction('LineString');
-			break;
-		case 'btnDrawPoly':
-			activateDrawInteraction('Polygon');
-			break;
-		case 'btnDelete':
-			break;
-		default:
-			break;
-	}
 }
 
 // $('.btnMenu').on('click', function(event) {
